@@ -14,10 +14,12 @@ export async function GET(req: NextRequest) {
     const today = getToday()
 
     if (doctorId) {
+      const filter = `doctor_id.eq.${doctorId},doctor_id.is.null`
+
       const { data: waiting } = await supabase
         .from("queue_tickets")
-        .select("id, ticket_number, formatted_number, patient_name, created_at")
-        .eq("doctor_id", doctorId)
+        .select("id, ticket_number, formatted_number, patient_name, doctor_id, created_at")
+        .or(filter)
         .eq("status", "waiting")
         .eq("queue_date", today)
         .order("ticket_number")
@@ -25,16 +27,20 @@ export async function GET(req: NextRequest) {
       const { data: lastCalled } = await supabase
         .from("queue_tickets")
         .select("formatted_number, patient_name")
-        .eq("doctor_id", doctorId)
+        .or(`doctor_id.eq.${doctorId},doctor_id.is.null`)
         .eq("status", "called")
         .eq("queue_date", today)
         .order("called_at", { ascending: false })
         .limit(1)
 
+      const myPatients = (waiting || []).filter((t) => t.doctor_id === doctorId)
+      const walkIns = (waiting || []).filter((t) => !t.doctor_id)
       const nextTicket = waiting && waiting.length > 0 ? waiting[0] : null
 
       return NextResponse.json({
         waiting: waiting || [],
+        myPatients,
+        walkIns,
         waitingCount: waiting?.length || 0,
         nextTicket,
         lastCalled: lastCalled && lastCalled.length > 0 ? lastCalled[0] : null,
@@ -69,10 +75,12 @@ export async function POST(req: NextRequest) {
     const supabase = await createAdminClient()
     const today = getToday()
 
+    const filter = `doctor_id.eq.${doctor_id},doctor_id.is.null`
+
     const { data: nextTicket } = await supabase
       .from("queue_tickets")
-      .select("id, ticket_number, formatted_number, patient_name")
-      .eq("doctor_id", doctor_id)
+      .select("id, ticket_number, formatted_number, patient_name, doctor_id")
+      .or(filter)
       .eq("status", "waiting")
       .eq("queue_date", today)
       .order("ticket_number")
@@ -83,9 +91,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No patients waiting" }, { status: 400 })
     }
 
+    const update: Record<string, unknown> = {
+      status: "called",
+      called_at: new Date().toISOString(),
+    }
+    if (!nextTicket.doctor_id) {
+      update.doctor_id = doctor_id
+    }
+
     const { data: updated } = await supabase
       .from("queue_tickets")
-      .update({ status: "called", called_at: new Date().toISOString() })
+      .update(update)
       .eq("id", nextTicket.id)
       .select("ticket_number, formatted_number, patient_name")
       .single()
@@ -94,6 +110,7 @@ export async function POST(req: NextRequest) {
       formatted: updated?.formatted_number,
       patientName: updated?.patient_name,
       ticketNumber: updated?.ticket_number,
+      claimed: !nextTicket.doctor_id,
     })
   } catch (err) {
     console.error("[triage/queue] POST error:", err)
