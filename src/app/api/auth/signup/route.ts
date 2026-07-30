@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const { name, email, password, specialty } = await req.json()
 
     if (!name || !email || !password || !specialty) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      return NextResponse.json({ error: "All fields are required" }, { status: 400 })
     }
 
     const supabase = await createAdminClient()
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (authError) {
+      console.error("[auth/signup] auth error:", authError.message)
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
 
@@ -36,8 +37,9 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (doctorError) {
+      console.error("[auth/signup] doctor insert error:", doctorError.message)
       await supabase.auth.admin.deleteUser(authUser.user.id)
-      return NextResponse.json({ error: "Failed to create doctor record" }, { status: 500 })
+      return NextResponse.json({ error: `Database error: ${doctorError.message}` }, { status: 500 })
     }
 
     const { error: linkError } = await supabase
@@ -50,14 +52,16 @@ export async function POST(req: NextRequest) {
       })
 
     if (linkError) {
+      console.error("[auth/signup] link error:", linkError.message)
       await supabase.auth.admin.deleteUser(authUser.user.id)
       await supabase.from("doctors").delete().eq("id", doctor.id)
-      return NextResponse.json({ error: "Failed to link account" }, { status: 500 })
+      return NextResponse.json({ error: `Database error: ${linkError.message}` }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, doctor: { id: doctor.id, name: doctor.name } })
   } catch (err) {
-    console.error("[auth/signup] error:", err)
-    return NextResponse.json({ error: "Signup failed" }, { status: 500 })
+    console.error("[auth/signup] unexpected error:", err)
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

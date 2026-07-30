@@ -92,19 +92,16 @@ export default function SignupPage() {
             </div>
           )}
 
-          {([
-            { label: "Full Name", key: "name", type: "text" },
-            { label: "Email", key: "email", type: "email" },
-          ] as const).map((field) => (
-            <div key={field.key}>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">{field.label}</label>
-              <input type={field.type} value={eval(field.key)} onChange={(e) => {
-                if (field.key === "name") setName(e.target.value)
-                if (field.key === "email") setEmail(e.target.value)
-              }}
-                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
-            </div>
-          ))}
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+          </div>
 
           <div>
             <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Specialty</label>
