@@ -2,9 +2,10 @@
 -- Run this in Supabase SQL Editor
 
 -- Link Supabase Auth users to doctors
-CREATE TABLE IF NOT EXISTS doctor_accounts (
+DROP TABLE IF EXISTS doctor_accounts;
+CREATE TABLE doctor_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id),
+  user_id UUID UNIQUE NOT NULL,
   doctor_id UUID NOT NULL REFERENCES doctors(id),
   email TEXT NOT NULL,
   name TEXT NOT NULL,
