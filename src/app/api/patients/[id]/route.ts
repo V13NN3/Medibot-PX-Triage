@@ -33,7 +33,16 @@ export async function GET(
       .order("uploaded_at", { ascending: false })
       .limit(20)
 
-    return NextResponse.json({ patient, vitals: vitals || [], labs: labs || [] })
+    const { data: visits } = await supabase
+      .from("patient_visits")
+      .select("*")
+      .eq("patient_id", id)
+      .order("visit_date", { ascending: false })
+      .limit(20)
+
+    const lastVisit = visits && visits.length > 0 ? visits[0].visit_date : null
+
+    return NextResponse.json({ patient, vitals: vitals || [], labs: labs || [], visits: visits || [], lastVisit })
   } catch (err) {
     console.error("[triage/patients/[id]] error:", err)
     return NextResponse.json({ error: "Failed to get patient" }, { status: 500 })
