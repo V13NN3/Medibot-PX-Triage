@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 
 interface Patient {
@@ -13,34 +13,48 @@ interface Patient {
 export default function PatientsPage() {
   const [query, setQuery] = useState("")
   const [patients, setPatients] = useState<Patient[]>([])
-  const [loading, setLoading] = useState(false)
+  const [allPatients, setAllPatients] = useState<Patient[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const search = useCallback(async (q: string) => {
-    setQuery(q)
-    if (q.length < 2) { setPatients([]); return }
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/patients/search?q=${encodeURIComponent(q)}`)
-      const data = await res.json()
-      setPatients(data.patients || [])
-    } catch {}
-    setLoading(false)
+  useEffect(() => {
+    fetch("/api/patients/search?q=")
+      .then((r) => r.json())
+      .then((data) => {
+        setAllPatients(data.patients || [])
+        setPatients(data.patients || [])
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
+
+  const handleSearch = (q: string) => {
+    setQuery(q)
+    if (q.length < 2) {
+      setPatients(allPatients)
+      return
+    }
+    setLoading(true)
+    fetch(`/api/patients/search?q=${encodeURIComponent(q)}`)
+      .then((r) => r.json())
+      .then((data) => setPatients(data.patients || []))
+      .catch(() => setPatients(allPatients))
+      .finally(() => setLoading(false))
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Patients</h1>
-        <p className="text-sm text-gray-500">Search patient records</p>
+        <p className="text-sm text-gray-500">All patient records ({allPatients.length} total)</p>
       </div>
 
-      <input type="search" value={query} placeholder="Search by patient name..."
-        onChange={(e) => search(e.target.value)}
+      <input type="search" value={query} placeholder="Filter by name..."
+        onChange={(e) => handleSearch(e.target.value)}
         className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm shadow-sm" />
 
-      {loading && <p className="text-sm text-gray-400 text-center py-4">Searching...</p>}
+      {loading && <p className="text-sm text-gray-400 text-center py-4">Loading...</p>}
 
-      {patients.length > 0 && (
+      {!loading && patients.length > 0 && (
         <div className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden bg-white dark:bg-gray-900">
           {patients.map((p) => (
             <Link key={p.id} href={`/dashboard/patients/${p.id}`}
@@ -57,8 +71,10 @@ export default function PatientsPage() {
         </div>
       )}
 
-      {!loading && patients.length === 0 && query.length >= 2 && (
-        <p className="text-sm text-gray-400 text-center py-4">No patients found matching &quot;{query}&quot;</p>
+      {!loading && patients.length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-4">
+          {query ? `No patients matching "${query}"` : "No patient records found"}
+        </p>
       )}
     </div>
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { createClient } from "@/lib/supabase"
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const HOURS = Array.from({ length: 10 }, (_, i) => `${i + 8}:00`)
@@ -15,22 +16,35 @@ interface Slot {
 export default function SchedulePage() {
   const [slots, setSlots] = useState<Slot[]>([])
   const [doctorId, setDoctorId] = useState("")
-  const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([])
+  const [doctorName, setDoctorName] = useState("")
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch("/api/doctors/search?q=")
-      .then((r) => r.json())
-      .then((data) => setDoctors(data.doctors || []))
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data: account } = await supabase
+        .from("doctor_accounts")
+        .select("doctor_id, name")
+        .eq("user_id", user.id)
+        .single()
+      if (account) {
+        setDoctorId(account.doctor_id)
+        setDoctorName(account.name)
+        const res = await fetch(`/api/schedule?doctor_id=${account.doctor_id}`)
+        const data = await res.json()
+        if (data.slots) setSlots(data.slots)
+      }
+      setLoading(false)
+    })
   }, [])
 
   const toggleSlot = (day: number, hour: string) => {
     setSlots((prev) => {
       const existing = prev.find((s) => s.day_of_week === day && s.start_time === hour)
-      if (existing) {
-        return prev.filter((s) => s !== existing)
-      }
+      if (existing) return prev.filter((s) => s !== existing)
       return [...prev, { day_of_week: day, start_time: hour, end_time: `${parseInt(hour) + 1}:00`, is_available: true }]
     })
   }
@@ -54,22 +68,15 @@ export default function SchedulePage() {
     setSaving(false)
   }
 
+  if (loading) return <p className="text-sm text-gray-400 text-center py-8">Loading...</p>
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Schedule Availability</h1>
-        <p className="text-sm text-gray-500">Set your weekly available hours</p>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Select Doctor</label>
-        <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}
-          className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm">
-          <option value="">Choose your name...</option>
-          {doctors.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
+        <p className="text-sm text-gray-500">
+          {doctorName ? `Set your weekly available hours — ${doctorName}` : "Set your weekly available hours"}
+        </p>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">

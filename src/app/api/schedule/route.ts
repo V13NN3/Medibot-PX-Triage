@@ -4,7 +4,18 @@ import { createAdminClient } from "@/lib/db"
 export async function GET(req: NextRequest) {
   try {
     const q = req.nextUrl.searchParams.get("q") || ""
+    const doctorId = req.nextUrl.searchParams.get("doctor_id")
     const supabase = await createAdminClient()
+
+    if (doctorId) {
+      const { data: slots } = await supabase
+        .from("doctor_schedule")
+        .select("id, day_of_week, start_time, end_time, is_available")
+        .eq("doctor_id", doctorId)
+        .order("day_of_week")
+        .order("start_time")
+      return NextResponse.json({ slots: slots || [] })
+    }
 
     let query = supabase
       .from("doctors")
@@ -20,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ doctors: data || [] })
   } catch (err) {
-    console.error("[triage/doctors/search] error:", err)
+    console.error("[triage/schedule] GET error:", err)
     return NextResponse.json({ error: "Search failed" }, { status: 500 })
   }
 }
