@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase"
 
 export default function LoginPage() {
@@ -48,6 +49,11 @@ export default function LoginPage() {
             className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary-dark transition-colors disabled:bg-gray-300 text-sm">
             {loading ? "Signing in..." : "Sign In"}
           </button>
+
+          <p className="text-xs text-gray-500 text-center">
+            No account yet?{" "}
+            <Link href="/signup" className="text-primary font-medium hover:underline">Create one</Link>
+          </p>
         </div>
       </div>
     </div>
