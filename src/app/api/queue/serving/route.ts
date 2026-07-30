@@ -1,34 +1,57 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/db"
 
-const phOffset = 8 * 60
-
 function getToday(): string {
   const now = new Date()
-  const phNow = new Date(now.getTime() + phOffset * 60 * 1000)
+  const phNow = new Date(now.getTime() + 8 * 60 * 60 * 1000)
   return phNow.toISOString().slice(0, 10)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const doctorId = req.nextUrl.searchParams.get("doctor_id")
     const supabase = await createAdminClient()
     const today = getToday()
 
-    const { data } = await supabase
-      .from("queue_counter")
-      .select("current_number, now_serving")
-      .eq("queue_date", today)
-      .single()
+    if (doctorId) {
+      const { data: waiting } = await supabase
+        .from("queue_tickets")
+        .select("id, ticket_number, formatted_number, patient_name, created_at")
+        .eq("doctor_id", doctorId)
+        .eq("status", "waiting")
+        .eq("queue_date", today)
+        .order("ticket_number")
 
-    if (!data) {
-      return NextResponse.json({ formatted: "A-000", nowServing: 0, currentNumber: 0, nextNumber: 1 })
+      const { data: lastCalled } = await supabase
+        .from("queue_tickets")
+        .select("formatted_number, patient_name")
+        .eq("doctor_id", doctorId)
+        .eq("status", "called")
+        .eq("queue_date", today)
+        .order("called_at", { ascending: false })
+        .limit(1)
+
+      const nextTicket = waiting && waiting.length > 0 ? waiting[0] : null
+
+      return NextResponse.json({
+        waiting: waiting || [],
+        waitingCount: waiting?.length || 0,
+        nextTicket,
+        lastCalled: lastCalled && lastCalled.length > 0 ? lastCalled[0] : null,
+      })
     }
 
+    const { data: latest } = await supabase
+      .from("queue_tickets")
+      .select("formatted_number, patient_name, doctor_id")
+      .eq("status", "called")
+      .eq("queue_date", today)
+      .order("called_at", { ascending: false })
+      .limit(1)
+
     return NextResponse.json({
-      formatted: `A-${String(data.now_serving).padStart(3, "0")}`,
-      nowServing: data.now_serving,
-      currentNumber: data.current_number,
-      nextNumber: data.current_number + 1,
+      formatted: latest && latest.length > 0 ? latest[0].formatted_number : "A-000",
+      patientName: latest && latest.length > 0 ? latest[0].patient_name : "",
     })
   } catch (err) {
     console.error("[triage/queue] GET error:", err)
@@ -36,43 +59,44 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const { doctor_id } = await req.json()
+    if (!doctor_id) {
+      return NextResponse.json({ error: "Missing doctor_id" }, { status: 400 })
+    }
+
     const supabase = await createAdminClient()
     const today = getToday()
 
-    const { data, error } = await supabase
-      .from("queue_counter")
-      .select("id, now_serving, current_number")
+    const { data: nextTicket } = await supabase
+      .from("queue_tickets")
+      .select("id, ticket_number, formatted_number, patient_name")
+      .eq("doctor_id", doctor_id)
+      .eq("status", "waiting")
       .eq("queue_date", today)
+      .order("ticket_number")
+      .limit(1)
       .single()
 
-    if (error || !data) {
-      return NextResponse.json({ error: "No queue started today" }, { status: 400 })
-    }
-
-    if (data.now_serving >= data.current_number) {
+    if (!nextTicket) {
       return NextResponse.json({ error: "No patients waiting" }, { status: 400 })
     }
 
     const { data: updated } = await supabase
-      .from("queue_counter")
-      .update({ now_serving: data.now_serving + 1, updated_at: new Date().toISOString() })
-      .eq("id", data.id)
-      .select("current_number, now_serving")
+      .from("queue_tickets")
+      .update({ status: "called", called_at: new Date().toISOString() })
+      .eq("id", nextTicket.id)
+      .select("ticket_number, formatted_number, patient_name")
       .single()
 
-    if (!updated) {
-      return NextResponse.json({ error: "Update failed" }, { status: 500 })
-    }
-
     return NextResponse.json({
-      formatted: `A-${String(updated.now_serving).padStart(3, "0")}`,
-      nowServing: updated.now_serving,
-      currentNumber: updated.current_number,
+      formatted: updated?.formatted_number,
+      patientName: updated?.patient_name,
+      ticketNumber: updated?.ticket_number,
     })
   } catch (err) {
     console.error("[triage/queue] POST error:", err)
-    return NextResponse.json({ error: "Failed to update queue" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to call next" }, { status: 500 })
   }
 }

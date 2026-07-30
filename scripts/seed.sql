@@ -33,6 +33,22 @@ CREATE TABLE IF NOT EXISTS patient_visits (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Queue tickets (per-patient, per-doctor)
+CREATE TABLE IF NOT EXISTS queue_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_number INTEGER NOT NULL,
+  formatted_number TEXT NOT NULL,
+  patient_name TEXT NOT NULL,
+  doctor_id UUID REFERENCES doctors(id),
+  status TEXT NOT NULL DEFAULT 'waiting',
+  queue_date DATE NOT NULL DEFAULT (NOW() AT TIME ZONE 'Asia/Manila')::DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  called_at TIMESTAMPTZ
+);
+
+-- Remove now_serving from queue_counter (replaced by queue_tickets)
+ALTER TABLE queue_counter DROP COLUMN IF EXISTS now_serving;
+
 -- Lab result file uploads (stores Supabase Storage URL)
 CREATE TABLE IF NOT EXISTS lab_results (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
