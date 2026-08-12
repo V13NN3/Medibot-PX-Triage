@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
       const { data: lastCalled } = await supabase
         .from("queue_tickets")
-        .select("formatted_number, patient_name")
+        .select("id, formatted_number, patient_name, doctor_id")
         .or(`doctor_id.eq.${doctorId},doctor_id.is.null`)
         .eq("status", "called")
         .eq("queue_date", today)
@@ -91,26 +91,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No patients waiting" }, { status: 400 })
     }
 
-    const update: Record<string, unknown> = {
-      status: "called",
-      called_at: new Date().toISOString(),
-    }
-    if (!nextTicket.doctor_id) {
-      update.doctor_id = doctor_id
-    }
-
     const { data: updated } = await supabase
       .from("queue_tickets")
-      .update(update)
+      .update({
+        status: "called",
+        called_at: new Date().toISOString(),
+      })
       .eq("id", nextTicket.id)
-      .select("ticket_number, formatted_number, patient_name")
+      .select("id, ticket_number, formatted_number, patient_name, doctor_id")
       .single()
 
     return NextResponse.json({
+      id: updated?.id,
       formatted: updated?.formatted_number,
       patientName: updated?.patient_name,
       ticketNumber: updated?.ticket_number,
-      claimed: !nextTicket.doctor_id,
+      doctorId: updated?.doctor_id,
     })
   } catch (err) {
     console.error("[triage/queue] POST error:", err)
