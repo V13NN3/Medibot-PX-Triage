@@ -30,6 +30,11 @@ export default function QueuePage() {
   const [loading, setLoading] = useState("")
   const [claimName, setClaimName] = useState("")
   const [history, setHistory] = useState<{ formatted: string; patient: string; time: string }[]>([])
+  const [showRx, setShowRx] = useState(false)
+  const [rxNote, setRxNote] = useState("")
+  const [rxItems, setRxItems] = useState([{ name: "", dosage: "", frequency: "", duration: "", instructions: "" }])
+  const [rxSaved, setRxSaved] = useState(false)
+  const [rxExisting, setRxExisting] = useState<any[]>([])
 
   useEffect(() => {
     const supabase = createClient()
@@ -66,6 +71,10 @@ export default function QueuePage() {
     const interval = setInterval(fetchQueue, 3000)
     return () => clearInterval(interval)
   }, [doctorId])
+
+  useEffect(() => {
+    if (lastCalled?.id) fetchRx(lastCalled.id)
+  }, [lastCalled?.id])
 
   const callNext = async () => {
     if (!nextTicket) return
@@ -143,6 +152,57 @@ export default function QueuePage() {
   const isUnknown = (name: string) => !name || name === "Unknown"
   const canGet = lastCalled && (!lastCalled.doctor_id || lastCalled.doctor_id !== doctorId || isUnknown(lastCalled.patient_name))
 
+  const fetchRx = async (ticketId: string) => {
+    try {
+      const res = await fetch(`/api/rx?ticket_id=${ticketId}`)
+      const data = await res.json()
+      setRxExisting(data.prescriptions || [])
+    } catch {}
+  }
+
+  const updateRxItem = (idx: number, field: keyof (typeof rxItems)[number], value: string) => {
+    setRxItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)))
+  }
+
+  const addRxItem = () => {
+    setRxItems((prev) => [...prev, { name: "", dosage: "", frequency: "", duration: "", instructions: "" }])
+  }
+
+  const removeRxItem = (idx: number) => {
+    setRxItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const saveRx = async () => {
+    if (!lastCalled) return
+    const items = rxItems.filter((it) => it.name.trim())
+    if (items.length === 0) return
+    setLoading("rx")
+    try {
+      const res = await fetch("/api/rx/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticket_id: lastCalled.id,
+          formatted_number: lastCalled.formatted_number,
+          patient_name: claimName || lastCalled.patient_name,
+          doctor_id: doctorId,
+          medications: items,
+          note: rxNote,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.prescription) {
+        setRxSaved(true)
+        setShowRx(false)
+        setRxItems([{ name: "", dosage: "", frequency: "", duration: "", instructions: "" }])
+        setRxNote("")
+        await fetchRx(lastCalled.id)
+        setTimeout(() => setRxSaved(false), 3000)
+      }
+    } catch {}
+    setLoading("")
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
@@ -175,7 +235,83 @@ export default function QueuePage() {
               }`}>
               {loading === "undo" ? "Undoing..." : "Undo Call"}
             </button>
+            <button onClick={() => { setShowRx((v) => !v); setRxSaved(false) }} disabled={!!loading}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                loading ? "bg-gray-300 cursor-not-allowed" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+              }`}>
+              {showRx ? "Close" : "Write Prescription"}
+            </button>
           </div>
+
+          {rxSaved && (
+            <p className="mt-3 text-sm font-medium text-success">&#10003; Prescription saved!</p>
+          )}
+
+          {rxExisting.length > 0 && !showRx && (
+            <div className="mt-4 text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Existing Prescription</p>
+              {rxExisting.map((rx) => (
+                <div key={rx.id} className="text-sm text-foreground">
+                  <p className="font-medium">{rx.formatted_number} · {rx.patient_name}</p>
+                  <ul className="mt-1 list-disc list-inside text-xs text-gray-600 dark:text-gray-300">
+                    {(rx.medications || []).map((m: any, i: number) => (
+                      <li key={i}>
+                        {m.name}{m.dosage ? ` — ${m.dosage}` : ""}{m.frequency ? `, ${m.frequency}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showRx && (
+            <div className="mt-4 text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+              <p className="text-sm font-semibold text-foreground mb-3">
+                Prescription for {lastCalled.formatted_number}
+              </p>
+              <div className="flex flex-col gap-2 mb-3">
+                {rxItems.map((item, idx) => (
+                  <div key={idx} className="flex flex-col gap-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="text" value={item.name} onChange={(e) => updateRxItem(idx, "name", e.target.value)}
+                        placeholder="Medication name" maxLength={100}
+                        className="col-span-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+                      <input type="text" value={item.dosage} onChange={(e) => updateRxItem(idx, "dosage", e.target.value)}
+                        placeholder="Dosage (e.g. 500mg)" maxLength={50}
+                        className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+                      <input type="text" value={item.frequency} onChange={(e) => updateRxItem(idx, "frequency", e.target.value)}
+                        placeholder="Frequency (e.g. 3x/day)" maxLength={50}
+                        className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+                      <input type="text" value={item.duration} onChange={(e) => updateRxItem(idx, "duration", e.target.value)}
+                        placeholder="Duration (e.g. 7 days)" maxLength={50}
+                        className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+                      <input type="text" value={item.instructions} onChange={(e) => updateRxItem(idx, "instructions", e.target.value)}
+                        placeholder="Instructions (optional)" maxLength={200}
+                        className="col-span-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
+                    </div>
+                    <div className="flex justify-end">
+                      <button onClick={() => removeRxItem(idx)} disabled={rxItems.length === 1}
+                        className="text-xs text-danger hover:underline disabled:text-gray-400">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addRxItem}
+                className="text-xs font-semibold text-primary hover:underline mb-3">
+                + Add medication
+              </button>
+              <input type="text" value={rxNote} onChange={(e) => setRxNote(e.target.value)}
+                placeholder="Notes (optional)" maxLength={200}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm mb-3" />
+              <button onClick={saveRx} disabled={!!loading || rxItems.every((it) => !it.name.trim())}
+                className="w-full py-3 rounded-xl bg-teal text-white font-semibold hover:bg-teal-dark transition-colors disabled:bg-gray-300">
+                {loading === "rx" ? "Saving..." : "Save Prescription"}
+              </button>
+            </div>
+          )}
 
           {canGet && (
             <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 justify-center">

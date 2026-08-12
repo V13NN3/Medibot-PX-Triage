@@ -38,6 +38,23 @@ interface VisitRecord {
   notes?: string
 }
 
+interface Medication {
+  name: string
+  dosage?: string
+  frequency?: string
+  duration?: string
+  instructions?: string
+}
+
+interface Prescription {
+  id: string
+  formatted_number: string
+  patient_name: string
+  medications: Medication[]
+  note?: string
+  created_at: string
+}
+
 export default function PatientDetailPage() {
   const params = useParams()
   const patientId = params.id as string
@@ -45,6 +62,7 @@ export default function PatientDetailPage() {
   const [vitals, setVitals] = useState<VitalsRecord[]>([])
   const [labs, setLabs] = useState<LabResult[]>([])
   const [visits, setVisits] = useState<VisitRecord[]>([])
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
   const [lastVisit, setLastVisit] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -60,6 +78,7 @@ export default function PatientDetailPage() {
         setVitals(data.vitals || [])
         setLabs(data.labs || [])
         setVisits(data.visits || [])
+        setPrescriptions(data.prescriptions || [])
         setLastVisit(data.lastVisit)
         setLoading(false)
       })
@@ -149,6 +168,38 @@ export default function PatientDetailPage() {
                 <p className="text-xs text-gray-400 font-mono">{v.visit_date}</p>
                 <p className="text-sm font-medium text-foreground mt-0.5">{v.diagnosis || "No diagnosis recorded"}</p>
                 {v.notes && <p className="text-xs text-gray-500 mt-0.5">{v.notes}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {prescriptions.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Prescriptions ({prescriptions.length})</p>
+          </div>
+          <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+            {prescriptions.map((rx) => (
+              <div key={rx.id} className="px-5 py-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">Ticket {rx.formatted_number}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(rx.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {(rx.medications || []).map((m, i) => (
+                    <li key={i} className="text-sm text-gray-600 dark:text-gray-300">
+                      <span className="font-medium text-foreground">{m.name}</span>
+                      {m.dosage && <span> — {m.dosage}</span>}
+                      {m.frequency && <span>, {m.frequency}</span>}
+                      {m.duration && <span> ({m.duration})</span>}
+                      {m.instructions && <span className="text-xs text-gray-500"> · {m.instructions}</span>}
+                    </li>
+                  ))}
+                </ul>
+                {rx.note && <p className="text-xs text-gray-500 mt-1.5">{rx.note}</p>}
               </div>
             ))}
           </div>

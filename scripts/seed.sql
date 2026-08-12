@@ -59,3 +59,15 @@ CREATE TABLE IF NOT EXISTS lab_results (
   notes TEXT,
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Prescriptions (tied to queue tickets so patients can look them up by number + name)
+CREATE TABLE IF NOT EXISTS prescriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id UUID REFERENCES queue_tickets(id),
+  formatted_number TEXT NOT NULL,
+  patient_name TEXT NOT NULL,
+  doctor_id UUID REFERENCES doctors(id),
+  medications JSONB NOT NULL DEFAULT '[]',
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

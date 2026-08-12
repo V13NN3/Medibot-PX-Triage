@@ -42,7 +42,21 @@ export async function GET(
 
     const lastVisit = visits && visits.length > 0 ? visits[0].visit_date : null
 
-    return NextResponse.json({ patient, vitals: vitals || [], labs: labs || [], visits: visits || [], lastVisit })
+    const { data: prescriptions } = await supabase
+      .from("prescriptions")
+      .select("*")
+      .ilike("patient_name", `%${patient.name}%`)
+      .order("created_at", { ascending: false })
+      .limit(20)
+
+    return NextResponse.json({
+      patient,
+      vitals: vitals || [],
+      labs: labs || [],
+      visits: visits || [],
+      lastVisit,
+      prescriptions: prescriptions || [],
+    })
   } catch (err) {
     console.error("[triage/patients/[id]] error:", err)
     return NextResponse.json({ error: "Failed to get patient" }, { status: 500 })
