@@ -21,6 +21,7 @@ export class SignalClient {
   private name = ""
   private handlers: SignalHandlers
   private shouldReconnect = false
+  private hasConnected = false
   private reconnectDelay = 1000
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -33,6 +34,7 @@ export class SignalClient {
     this.doctorId = doctorId
     this.name = name
     this.shouldReconnect = true
+    this.hasConnected = false
     this.open()
   }
 
@@ -53,6 +55,7 @@ export class SignalClient {
 
     ws.onopen = () => {
       clearTimeout(connectTimeout)
+      this.hasConnected = true
       this.reconnectDelay = 1000
       ws.send(JSON.stringify({ type: "register", doctorId: this.doctorId, name: this.name }))
       this.handlers.onOpen?.()
@@ -69,7 +72,7 @@ export class SignalClient {
     ws.onclose = () => {
       clearTimeout(connectTimeout)
       this.handlers.onClose?.()
-      if (this.shouldReconnect) {
+      if (this.shouldReconnect && this.hasConnected) {
         this.reconnectTimer = setTimeout(() => this.open(), this.reconnectDelay)
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000)
       }

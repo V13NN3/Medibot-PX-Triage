@@ -117,15 +117,23 @@ export default function TelehealthPage() {
       setError("Could not load your doctor profile. Make sure you are logged in.")
       return
     }
+    if (!SIGNAL_URL) {
+      setError("NEXT_PUBLIC_SIGNAL_URL is not set. Check your .env.local")
+      return
+    }
     const doc = doctorRef.current
     setError("")
     setPresence("connecting")
+    console.log("[telehealth] connecting to signal:", SIGNAL_URL, "as", doc.name)
 
     const client = new SignalClient(SIGNAL_URL, {
       onOpen: () => setPresence("online"),
       onClose: () => setPresence((p) => (p === "online" ? "reconnecting" : p)),
-      onError: () => {
-        setError("Cannot reach the signal server. Is the kiosk running?")
+      onError: (err) => {
+        console.error("[telehealth] signal error:", err)
+        client.disconnect()
+        clientRef.current = null
+        setError("Cannot reach the signal server. Check that the kiosk is running and the URL is correct.")
         setPresence("idle")
       },
       onMessage: async (msg) => {
