@@ -22,6 +22,7 @@ export default function TelehealthPage() {
   const callIdRef = useRef("")
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const doctorRef = useRef<{ id: string; name: string } | null>(null)
 
   const SIGNAL_URL = process.env.NEXT_PUBLIC_SIGNAL_URL || ""
 
@@ -38,16 +39,26 @@ export default function TelehealthPage() {
   const loadDoctor = useCallback(async () => {
     try {
       const supabase = createClient()
-      const { data: session } = await supabase.auth.getUser()
-      if (!session?.user) return
+      const { data: session, error: authErr } = await Promise.race([
+        supabase.auth.getUser(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("auth timeout")), 5000)),
+      ])
+      if (authErr || !session?.user) {
+        console.warn("[telehealth] no auth session:", authErr?.message ?? "no user")
+        return
+      }
       const { data: account } = await supabase
         .from("doctor_accounts")
         .select("doctor_id, name")
         .eq("user_id", session.user.id)
         .single()
-      if (account) setDoctor({ id: account.doctor_id, name: account.name })
-    } catch {
-      /* ignore */
+      if (account) {
+        const d = { id: account.doctor_id, name: account.name }
+        setDoctor(d)
+        doctorRef.current = d
+      }
+    } catch (err) {
+      console.warn("[telehealth] loadDoctor failed:", err)
     }
   }, [])
 
@@ -99,19 +110,24 @@ export default function TelehealthPage() {
   }
 
   const goAvailable = async () => {
-    if (!doctor) {
+    if (!doctorRef.current) {
       await loadDoctor()
     }
-    if (!doctor) {
-      setError("Could not load your doctor profile")
+    if (!doctorRef.current) {
+      setError("Could not load your doctor profile. Make sure you are logged in.")
       return
     }
+    const doc = doctorRef.current
     setError("")
     setPresence("connecting")
 
     const client = new SignalClient(SIGNAL_URL, {
       onOpen: () => setPresence("online"),
       onClose: () => setPresence((p) => (p === "online" ? "reconnecting" : p)),
+      onError: () => {
+        setError("Cannot reach the signal server. Is the kiosk running?")
+        setPresence("idle")
+      },
       onMessage: async (msg) => {
         if (msg.type === "incoming-call") {
           callIdRef.current = msg.callId || ""
@@ -152,7 +168,7 @@ export default function TelehealthPage() {
     })
 
     clientRef.current = client
-    client.connect(doctor.id, doctor.name)
+    client.connect(doc.id, doc.name)
   }
 
   const goOffline = () => {

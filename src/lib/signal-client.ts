@@ -44,7 +44,15 @@ export class SignalClient {
     const ws = new WebSocket(this.url)
     this.ws = ws
 
+    const connectTimeout = setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        console.warn("[signal] connection timeout, closing")
+        ws.close()
+      }
+    }, 8000)
+
     ws.onopen = () => {
+      clearTimeout(connectTimeout)
       this.reconnectDelay = 1000
       ws.send(JSON.stringify({ type: "register", doctorId: this.doctorId, name: this.name }))
       this.handlers.onOpen?.()
@@ -59,6 +67,7 @@ export class SignalClient {
     }
 
     ws.onclose = () => {
+      clearTimeout(connectTimeout)
       this.handlers.onClose?.()
       if (this.shouldReconnect) {
         this.reconnectTimer = setTimeout(() => this.open(), this.reconnectDelay)
@@ -67,6 +76,7 @@ export class SignalClient {
     }
 
     ws.onerror = (err) => {
+      clearTimeout(connectTimeout)
       this.handlers.onError?.(err)
     }
   }

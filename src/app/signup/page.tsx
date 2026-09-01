@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase"
@@ -15,15 +15,28 @@ const SPECIALTIES = [
 
 export default function SignupPage() {
   const router = useRouter()
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirm, setConfirm] = useState("")
-  const [specialty, setSpecialty] = useState("")
+  const nameRef = useRef<HTMLInputElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const specialtyRef = useRef<HTMLSelectElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const confirmRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const signup = async () => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get("error")
+    if (err) setError(err)
+  }, [])
+
+  const signup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = nameRef.current?.value.trim() ?? ""
+    const email = emailRef.current?.value.trim() ?? ""
+    const specialty = specialtyRef.current?.value ?? ""
+    const password = passwordRef.current?.value ?? ""
+    const confirm = confirmRef.current?.value ?? ""
+
     setError("")
     if (!name || !email || !password || !specialty) {
       setError("All fields are required")
@@ -66,13 +79,6 @@ export default function SignupPage() {
     }
   }
 
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
-
   return (
     <div className="flex-1 flex items-center justify-center p-8">
       <div className="w-full max-w-sm flex flex-col gap-6">
@@ -81,31 +87,23 @@ export default function SignupPage() {
           <p className="text-sm text-gray-500">Doctor Triage Dashboard</p>
         </div>
 
-        <div className="flex flex-col gap-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
+        <form onSubmit={signup} method="post" action="/api/auth/signup" className="flex flex-col gap-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Create Account</p>
 
-          {name && (
-            <div className="flex justify-center">
-              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                {initials}
-              </div>
-            </div>
-          )}
-
           <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            <label htmlFor="name" className="text-xs font-medium text-gray-500 uppercase tracking-wider">Full Name</label>
+            <input id="name" name="name" ref={nameRef} type="text" autoComplete="name"
               className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            <label htmlFor="email" className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</label>
+            <input id="email" name="email" ref={emailRef} type="email" autoComplete="email"
               className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Specialty</label>
-            <select value={specialty} onChange={(e) => setSpecialty(e.target.value)}
+            <label htmlFor="specialty" className="text-xs font-medium text-gray-500 uppercase tracking-wider">Specialty</label>
+            <select id="specialty" name="specialty" ref={specialtyRef}
               className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm">
               <option value="">Select specialty...</option>
               {SPECIALTIES.map((s) => (
@@ -115,20 +113,19 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            <label htmlFor="password" className="text-xs font-medium text-gray-500 uppercase tracking-wider">Password</label>
+            <input id="password" name="password" ref={passwordRef} type="password" autoComplete="new-password"
               className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Confirm Password</label>
-            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && signup()}
+            <label htmlFor="confirm" className="text-xs font-medium text-gray-500 uppercase tracking-wider">Confirm Password</label>
+            <input id="confirm" name="confirm" ref={confirmRef} type="password" autoComplete="new-password"
               className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm" />
           </div>
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
-          <button onClick={signup} disabled={loading || !name || !email || !password || !confirm || !specialty}
+          <button type="submit" disabled={loading}
             className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary-dark transition-colors disabled:bg-gray-300 text-sm">
             {loading ? "Creating Account..." : "Create Account"}
           </button>
@@ -137,7 +134,7 @@ export default function SignupPage() {
             Already have an account?{" "}
             <Link href="/" className="text-primary font-medium hover:underline">Sign In</Link>
           </p>
-        </div>
+        </form>
       </div>
     </div>
   )
