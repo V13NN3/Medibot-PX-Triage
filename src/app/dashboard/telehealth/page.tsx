@@ -128,13 +128,27 @@ export default function TelehealthPage() {
 
     const client = new SignalClient(SIGNAL_URL, {
       onOpen: () => setPresence("online"),
-      onClose: () => setPresence((p) => (p === "online" ? "reconnecting" : p)),
-      onError: (err) => {
-        console.error("[telehealth] signal error:", err)
-        client.disconnect()
-        clientRef.current = null
-        setError("Cannot reach the signal server. Check that the kiosk is running and the URL is correct.")
-        setPresence("idle")
+      onClose: () => {
+        setPresence((p) => {
+          if (p === "online") return "reconnecting"
+          // If we never got to online and reconnection won't happen, show error
+          return p
+        })
+        // After first successful connect, reconnection is automatic.
+        // If never connected, SignalClient won't reconnect (hasConnected=false),
+        // so show error after a short delay to confirm no reconnect is coming.
+        if (!client.isConnected) {
+          setTimeout(() => {
+            if (!client.isOpen) {
+              setError("Cannot reach the signal server. Check that the kiosk is running and the URL is correct.")
+              setPresence("idle")
+            }
+          }, 10000)
+        }
+      },
+      onError: () => {
+        // onerror fires before onclose — let reconnection logic in onClose handle transient failures.
+        // Only show error if we never successfully connected.
       },
       onMessage: async (msg) => {
         if (msg.type === "incoming-call") {

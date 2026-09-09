@@ -78,9 +78,9 @@ export class SignalClient {
       }
     }
 
-    ws.onerror = (err) => {
+    ws.onerror = () => {
       clearTimeout(connectTimeout)
-      this.handlers.onError?.(err)
+      this.handlers.onError?.(new Event("WebSocket error"))
     }
   }
 
@@ -94,6 +94,10 @@ export class SignalClient {
 
   get isOpen(): boolean {
     return this.ws?.readyState === WebSocket.OPEN
+  }
+
+  get isConnected(): boolean {
+    return this.hasConnected
   }
 
   disconnect() {
