@@ -7,6 +7,9 @@ import { SignalClient, type SignalMessage } from "@/lib/signal-client"
 type Presence = "idle" | "connecting" | "online" | "reconnecting" | "offline"
 type CallState = "none" | "incoming" | "connecting" | "connected"
 
+const DEFAULT_SIGNAL_URL = process.env.NEXT_PUBLIC_SIGNAL_URL || ""
+const SIGNAL_URL_KEY = "medibot-signal-url"
+
 export default function TelehealthPage() {
   const [doctor, setDoctor] = useState<{ id: string; name: string } | null>(null)
   const [presence, setPresence] = useState<Presence>("idle")
@@ -15,6 +18,19 @@ export default function TelehealthPage() {
   const [error, setError] = useState("")
   const [muted, setMuted] = useState(false)
   const [camOn, setCamOn] = useState(true)
+  const [showUrlSettings, setShowUrlSettings] = useState(false)
+  const [urlInput, setUrlInput] = useState("")
+
+  // Resolve the kiosk signal URL at runtime: localStorage override wins over the
+  // build-time NEXT_PUBLIC_SIGNAL_URL. Lets you update the kiosk IP after a move
+  // without rebuilding the Triage app.
+  const [signalUrl, setSignalUrl] = useState(() => {
+    try {
+      return localStorage.getItem(SIGNAL_URL_KEY) || DEFAULT_SIGNAL_URL
+    } catch {
+      return DEFAULT_SIGNAL_URL
+    }
+  })
 
   const clientRef = useRef<SignalClient | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -23,8 +39,6 @@ export default function TelehealthPage() {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const doctorRef = useRef<{ id: string; name: string } | null>(null)
-
-  const SIGNAL_URL = process.env.NEXT_PUBLIC_SIGNAL_URL || ""
 
   const cleanupCall = useCallback(() => {
     pcRef.current?.close()
@@ -117,16 +131,17 @@ export default function TelehealthPage() {
       setError("Could not load your doctor profile. Make sure you are logged in.")
       return
     }
-    if (!SIGNAL_URL) {
-      setError("NEXT_PUBLIC_SIGNAL_URL is not set. Check your .env.local")
+    if (!signalUrl) {
+      setError("No kiosk URL set. Set NEXT_PUBLIC_SIGNAL_URL or enter it below.")
+      setShowUrlSettings(true)
       return
     }
     const doc = doctorRef.current
     setError("")
     setPresence("connecting")
-    console.log("[telehealth] connecting to signal:", SIGNAL_URL, "as", doc.name)
+    console.log("[telehealth] connecting to signal:", signalUrl, "as", doc.name)
 
-    const client = new SignalClient(SIGNAL_URL, {
+    const client = new SignalClient(signalUrl, {
       onOpen: () => setPresence("online"),
       onClose: () => {
         setPresence((p) => {
@@ -228,6 +243,29 @@ export default function TelehealthPage() {
 
   const isOnline = presence === "online"
 
+  const saveSignalUrl = () => {
+    const val = urlInput.trim()
+    if (!val) return
+    let normalized = val
+    if (!/^wss?:\/\//i.test(normalized)) {
+      normalized = val.startsWith("https://")
+        ? normalized.replace(/^https/i, "wss")
+        : `wss://${normalized}`
+    }
+    try {
+      localStorage.setItem(SIGNAL_URL_KEY, normalized)
+    } catch { /* ignore */ }
+    setSignalUrl(normalized)
+    setShowUrlSettings(false)
+    setUrlInput("")
+    setError("")
+  }
+
+  const toggleUrlSettings = () => {
+    setShowUrlSettings((s) => !s)
+    if (!showUrlSettings) setUrlInput(signalUrl)
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div>
@@ -265,7 +303,30 @@ export default function TelehealthPage() {
             Go Offline
           </button>
         )}
-        {!SIGNAL_URL && <p className="text-xs text-amber-600">Set NEXT_PUBLIC_SIGNAL_URL to enable telehealth.</p>}
+
+        <div className="border-t border-gray-200 dark:border-gray-800 pt-3 flex flex-col gap-2">
+          <button onClick={toggleUrlSettings}
+            className="text-xs text-gray-500 hover:text-foreground text-left">
+            {showUrlSettings ? "Hide" : "Edit"} kiosk address
+            <span className="block text-[10px] text-gray-400 break-all">{signalUrl || "not set"}</span>
+          </button>
+          {showUrlSettings && (
+            <div className="flex flex-col gap-2">
+              <input
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveSignalUrl() }}
+                placeholder="e.g. wss://192.168.1.31:3000/signal"
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button onClick={saveSignalUrl}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors">
+                Save Kiosk Address
+              </button>
+              {!signalUrl && <p className="text-xs text-amber-600">No kiosk address yet — enter one above.</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       {callState === "incoming" && (
